@@ -4,8 +4,8 @@ import xlrd
 #import os
 
 
-def value_valid(ws, row, value:list):
-	value = ws.cell_value(row + value[0], value[1])
+def value_valid(ws, row, value:list):					#change float type to integer
+	value = ws.cell_value(row + value[0], value[1])		
 	if type(value) == float:
 		value = str(int(value))
 	return value
