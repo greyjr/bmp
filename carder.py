@@ -1,10 +1,8 @@
 #Zaporizhstal
-#changed
 
 from docx import Document
 from docx.shared import Cm
 import xlrd
-#import os
 
 
 def value_valid(ws, row, value:list):					#change float type to integer
@@ -14,12 +12,12 @@ def value_valid(ws, row, value:list):					#change float type to integer
 	return value
 
 
-def find_replace(doc_obj, old_text, new_text, photo_list, height_photo):
+def find_replace(doc_obj, old_text, new_text, height_photo):
 	for paragraph in doc_obj.paragraphs:
 		if old_text in paragraph.text:
-			if old_text in photo_list:
+			if old_text in ['_038_photo_1_', '_039_photo_2_', '_040_photo_3_', '_041_photo_4_', '_042_photo_5_', '_043_agregat_photo_']:
 				paragraph.text = ''
-				paragraph.runs[0].add_picture('./mini_3/{}.jpg'.format(new_text.zfill(6)), height = Cm(height_photo))
+				paragraph.runs[0].add_picture('./mini_2/{}.jpg'.format(new_text.zfill(6)), height = Cm(height_photo))
 				continue
 			font_common = paragraph.runs[0].font
 			text = paragraph.text
@@ -31,10 +29,11 @@ def find_replace(doc_obj, old_text, new_text, photo_list, height_photo):
 	for table in doc_obj.tables:
 		for row in table.rows:
 			for cell in row.cells:
-				find_replace(cell, old_text, new_text, photo_list, height_photo)		
+				find_replace(cell, old_text, new_text, height_photo)		
 
 
 def methods_fill(context):
+	big_voltage = ['6кВ', '6 кВ', '0,69кВ']
 	methods = ['_012_method_1_', '_017_method_2_', '_022_method_3_', '_027_method_4_', '_032_method_5_']
 	values = ['_009_value_1_', '_014_value_2_', '_019_value_3_', '_024_value_4_', '_029_value_5_']
 	energies = ['_008_energy_type_1_', '_013_energy_type_2_', '_018_energy_type_3_', '_023_energy_type_4_', '_028_energy_type_5_']
@@ -45,32 +44,33 @@ def methods_fill(context):
 	for i in range(5):
 		if context[energies[i]] != 'электричество':
 			context[methods[i]] = methods_text[2]
-		elif context[values[i]] == '6 кВ' or context[values[i]] == '6кВ' or context[values[i]] == '0,69кВ':
+		elif context[values[i]] in big_voltage:
 			context[methods[i]] = methods_text[1]
 		else:
 			context[methods[i]] = methods_text[0]
 			
 
-def write_word(context:dict, filename:str, size_card:int):
+def write_word(context:dict, filename:str, size_card:int):											#
 	doc = Document(filename)
 	methods_fill(context)
-	photo_list = [	'_038_photo_1_', '_039_photo_2_', '_040_photo_3_',
-					'_041_photo_4_', '_042_photo_5_', '_043_agregat_photo_']
-	height_photo = 5.85 if size_card>1 else 10
+	height_photo = 5.55 if size_card>1 else 10
 	for key in context:
-		find_replace(doc, key, context[key], photo_list, height_photo)
+		find_replace(doc, key, context[key], height_photo)
+	
+
 	token = ['_010_blockirator_1_', '_015_blockirator_2_', '_020_blockirator_3_', '_025_blockirator_4_', '_030_blockirator_5_']
 	block_list_keys = []
 	for i in range(size_card):
 		block_list_keys.append(token[i])
-	
 	block_list = list(set([context[i] for i in block_list_keys]))
-	block_list.append('AP38P')
-	block_list.append('497-UA')
+	
+	name = "_".join(sorted(filter(None,block_list)))
 	new_p = doc.add_paragraph()
-	for i in range(len(block_list)):
-		new_r = new_p.add_run()
-		new_r.add_picture('./block/{}.jpg'.format(block_list[i]))
+	new_r = new_p.add_run()
+	new_r.add_picture('./block/{}{}.jpg'.format(name,(size_card+3)//3), width = Cm(27.5))
+
+
+
 	card_name = context['_000_card_number_'] + ' ' + context['_006_agregat_name_']
 	doc.save('./cards/{}.docx'.format(card_name))
 	print('Card N {} saved...'.format(card_name))
@@ -78,9 +78,9 @@ def write_word(context:dict, filename:str, size_card:int):
 
 def main():
 	wb = xlrd.open_workbook('общая БМП.xlsx')
-	ws = wb.sheet_by_name('ПЦ')
-	begin = 455
-	end = 495
+	ws = wb.sheet_by_name('ДЦ ЗС 1')
+	begin = 4
+	end = 40
 
 	card_context_list = {
 		'_000_card_number_':[0,0],
@@ -129,24 +129,32 @@ def main():
 		'_043_agregat_photo_':[0,7],
 		}
 	row = begin
+	break_flag = False
 	while row<=end:
-		context = {record:value_valid(ws,row,value) for record,value in card_context_list.items()}
-		context['_000_card_number_'] = context['_000_card_number_'].zfill(3)
-		size_card = 1
-		while not ws.cell_value(row+size_card,0):
-			size_card+=1
-			if size_card > 100:
-				break
+		context = {record:value_valid(ws,row,value) for record,value in card_context_list.items()}	#read excel and create dict CONTEXT
+		context['_000_card_number_'] = context['_000_card_number_'].zfill(3)						#fill number by 000    N3 --> N003
 
-		filename = 'blank_{}.docx'.format(size_card)
-		row = row + size_card
-		if size_card>5:
-			print('\nCard N {} to big! Skip.\n'.format(context['_000_card_number_']))
+		size_card = 1																				#min size card
+		while not ws.cell_value(row+size_card,0):													#calculate real card size
+			size_card+=1
+			if size_card > 16:																		#catch error (16 - max)
+				break_flag =True
+				break
+		if break_flag:
+			break
+		filename = 'blank_{}.docx'.format(size_card)												#name new docx-file
+		if size_card>5:																				#I haven't blanks for 6 and more points
+			print('\nCard N {} to big! Skip.\n'.format(context['_000_card_number_']))				#message to console if skip
 			continue
-		if context['_006_agregat_name_'][0] == '*':
+			print('Card N {} are big. Skip\n'.format(context['_000_card_number_']))
+			continue
+		if context['_006_agregat_name_'][0] == '*':													#skip marked card
 			print('Card N {} marked as not ready. Skip\n'.format(context['_000_card_number_']))
 			continue
-		write_word(context, filename, size_card)
+		
+		write_word(context, filename, size_card)													#call write-procedure
+		row = row + size_card																		#next row
+
 	print('***********finished***********')
 
 
